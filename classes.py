@@ -8,7 +8,7 @@ from math import pi, sin
 from numpy import linspace, arange, log10 , sqrt , mean, blackman, var
 from numpy.random.mtrand import normal
 from numpy.fft import fft, fftshift
-from scipy.signal import butter, lfilter, freqz
+from scipy.signal import butter, lfilter, freqz, filtfilt
 import matplotlib.pylab as m
 
 
@@ -26,16 +26,16 @@ CARR_TO_MOD = 20.0
 MAX_CARR_FREQ = 1000000000
 
 # define snr [dB]
-SNR = 20.0
+SNR = 10.0
 
 # define coefficient for setting sampling frequency
-FS_TO_CARR = 20.0
+FS_TO_CARR = 35.5
 
 # define coefficient for cut frequency
 COEF_CUT_FREQ = 10.0
 
 # define number of periods to be visible on plots
-PER_NUM = 4.0
+PER_NUM = 10.0
 
 # define min dB level on spectrum plot
 MIN_DB = -40
@@ -96,12 +96,23 @@ class Plotter(Dev):
     def run(self):
         m.figure("Carrier Signal Output")
         m.plot(self._generator._time[0:int(PER_NUM*FS_TO_CARR)], self._generator._carr_sig[0:int(PER_NUM*FS_TO_CARR)])
+        m.ylim([min(self._generator._carr_sig) , max(self._generator._carr_sig)])
+        m.xlim([0 , self._generator._time[int(PER_NUM*FS_TO_CARR)]])
+        m.grid()
         m.figure("Modulating Signal Output")
         m.plot(self._generator._time, self._generator._out_sig)
+        m.ylim([min(self._generator._out_sig) , max(self._generator._out_sig)])
+        m.xlim([0 , max(self._generator._time)])
+        m.grid()
 
         for i in range(len(self._client)):
             m.figure(self._client[i]._name + " Output")
             m.plot(self._generator._time , self._client[i]._out_sig)
+            m.ylim([min(self._client[i]._out_sig) , max(self._client[i]._out_sig)])
+            m.xlim([0 , max(self._generator._time)])
+            m. xlabel("t[s]")
+            m. ylabel("A[V]")
+            m.grid()
 
 
 # ------------------------ SPECTRUM ANALYZER -------------------------------
@@ -116,6 +127,7 @@ class SpectrumAnalyzer(Dev):
 
     def run(self):
         for i in range(len(self._client)):
+            # generate spectrum chart
             self._spectrum = fftshift(fft(self._client[i]._out_sig*blackman(len(self._client[i]._out_sig))))
             self._spectrum = self._spectrum/max(abs(self._spectrum)) # normalization
             self._freq = arange(0,(self._generator._fs)/2,(self._generator._fs)/len(self._spectrum))
@@ -123,6 +135,21 @@ class SpectrumAnalyzer(Dev):
             self.scale()
             m.figure("Magnitude " + self._client[i]._name)
             m.plot(self._freq , self._spectrum,".-")
+            m.xlim([min(self._freq) , max(self._freq)])
+            m. xlabel("f[Hz]")
+            m. ylabel("E[dBc]")
+
+            m.grid()
+
+            # generate spectrogram
+            m.figure ("Spectrogram " + self._client[i]._name)
+            m.specgram (self._client[i]._out_sig , NFFT =128 , Fs=self._generator._fs , noverlap =127)
+            m.ylim([0 , self._generator._fs/2])
+            m.xlim([0 , PER_NUM/self._generator._fm])
+            m.xlabel ("t[s]")
+            m.ylabel ("f[Hz]")
+            m.grid()
+
 
     def scale(self):
         min_idx = 0
@@ -257,7 +284,7 @@ class Filter(Dev):
     def butter_filter(self, data, fs, lowcut, highcut=0, order=5):
         #btype = 'pass'
         b, a = self.butter_get_coeff(fs, lowcut, highcut, order=order)
-        y = lfilter(b, a, data)
+        y = filtfilt(b, a, data)
         return y
 
     def butter_get_coeff(self, fs, cut1, cut2, order=5):
@@ -319,7 +346,7 @@ class Demodulator(Dev):
 class Amplifier(Dev):
 
     def run(self):
-        self._out_sig = self._input._out_sig/max(self._input._out_sig)*self._generator._fm
+        self._out_sig = self._input._out_sig/max(self._input._out_sig)*self._generator._am
 
 
 
