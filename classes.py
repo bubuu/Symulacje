@@ -29,7 +29,7 @@ MAX_CARR_FREQ = 1000000000
 SNR = 20.0
 
 # define coefficient for setting sampling frequency
-FS_TO_CARR = 100.0
+FS_TO_CARR = 20.0
 
 # define coefficient for cut frequency
 COEF_CUT_FREQ = 10.0
@@ -261,6 +261,7 @@ class Filter(Dev):
         return y
 
     def butter_get_coeff(self, fs, cut1, cut2, order=5):
+
         nyq = 0.5 * fs
         cut1 /= nyq
         cut2 /= nyq
@@ -268,8 +269,33 @@ class Filter(Dev):
             b, a = butter(order, cut1, btype='high')
         elif 'band' == str(self._type):
             b, a = butter(order, [cut1, cut2], btype='band')
+            m.figure()
+            for order in [3, 6, 9]:
+                c, d = butter(order, [cut1, cut2], str(self._type))
+                w, h = freqz(c, d, worN=2000)
+                m.plot((fs * 0.5 / pi) * w, abs(h), label="order = %d" % order)
+
+                m.plot([0, 0.5 * fs], [sqrt(0.5), sqrt(0.5)],
+                         '--', label='sqrt(0.5)')
+                m.xlabel('Frequency (Hz)')
+                m.ylabel('Gain')
+                m.grid(True)
+                m.legend(loc='best')
         else:
             b, a = butter(order, cut1, btype='low')
+            m.figure()
+            for order in [3, 6, 9]:
+                c, d = butter(order, cut1, str(self._type))
+                w, h = freqz(c, d, worN=2000)
+                m.plot((fs * 0.5 / pi) * w, abs(h), label="order = %d" % order)
+
+                m.plot([0, 0.5 * fs], [sqrt(0.5), sqrt(0.5)],
+                         '--', label='sqrt(0.5)')
+                m.xlabel('Frequency (Hz)')
+                m.ylabel('Gain')
+                m.grid(True)
+                m.legend(loc='best')
+
         return b, a
 
     def run(self):
@@ -281,6 +307,19 @@ class Filter(Dev):
 # --------------------------- DEMODULATOR ----------------------------------
 
 
+class Demodulator(Dev):
+
+    def run(self):
+        for s, t in zip(self._input._out_sig, self._generator._carr_sig): self._out_sig.append(s*t)
+
+
+# --------------------------- AMPLIFIER  -----------------------------------
+
+
+class Amplifier(Dev):
+
+    def run(self):
+        self._out_sig = self._input._out_sig/max(self._input._out_sig)*self._generator._fm
 
 
 
