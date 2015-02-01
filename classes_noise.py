@@ -5,7 +5,7 @@ __author__ = 'Malgorzata Targan'
 
 import sys
 from math import pi, sin
-from numpy import linspace, arange, log10, sqrt, mean, blackman, var
+from numpy import linspace, arange, log10 , sqrt , mean, blackman, var
 from numpy.random.mtrand import normal
 from numpy.fft import fft, fftshift
 from scipy.signal import butter, lfilter, freqz, filtfilt
@@ -26,7 +26,7 @@ CARR_TO_MOD = 20.0
 MAX_CARR_FREQ = 1000000000
 
 # define snr [dB]
-SNR = 5.0
+SNR = 10.0
 
 # define coefficient for setting sampling frequency
 FS_TO_CARR = 35.5
@@ -35,7 +35,7 @@ FS_TO_CARR = 35.5
 COEF_CUT_FREQ = 10.0
 
 # define number of periods to be visible on plots
-PER_NUM = 5.0
+PER_NUM = 10.0
 
 # define min dB level on spectrum plot
 MIN_DB = -20
@@ -94,26 +94,26 @@ class Plotter(Dev):
         self._client = []
 
     def run(self):
-        m.figure("Time domain")
-        # m.subplot(len(self._client), 1, 1)
-        # m.plot(self._generator._time[0:int(PER_NUM*FS_TO_CARR)], self._generator._carr_sig[0:int(PER_NUM*FS_TO_CARR)])
-        # m.ylim([min(self._generator._carr_sig) , max(self._generator._carr_sig)])
-        # m.xlim([0 , self._generator._time[int(PER_NUM*FS_TO_CARR)]])
-        # m.title("Carrier Signal Output")
-        # m.grid()
-        m.subplot(len(self._client)+1, 1, 1)
+
+        m.figure("Carrier Signal Output")
+        m.subplot(len(self._client), 1, 1)
+        m.plot(self._generator._time[0:int(PER_NUM*FS_TO_CARR)], self._generator._carr_sig[0:int(PER_NUM*FS_TO_CARR)])
+        m.ylim([min(self._generator._carr_sig) , max(self._generator._carr_sig)])
+        m.xlim([0 , self._generator._time[int(PER_NUM*FS_TO_CARR)]])
+        m.grid()
+        m.figure("Modulating Signal Output")
+        m.subplot(len(self._client), 1, 2)
         m.plot(self._generator._time, self._generator._out_sig)
         m.ylim([min(self._generator._out_sig) , max(self._generator._out_sig)])
         m.xlim([0 , max(self._generator._time)])
-        m.title("Modulating Signal Output")
         m.grid()
 
         for i in range(len(self._client)):
-            m.subplot(len(self._client)+1, 1, i + 2)
+            m.figure(self._client[i]._name + " Output")
+            m.subplot(len(self._client), 1, i + 2)
             m.plot(self._generator._time , self._client[i]._out_sig)
             m.ylim([min(self._client[i]._out_sig) , max(self._client[i]._out_sig)])
             m.xlim([0 , max(self._generator._time)])
-            m.title(self._client[i]._name + " Output")
             m. xlabel("t[s]")
             m. ylabel("A[V]")
             m.grid()
@@ -130,7 +130,6 @@ class SpectrumAnalyzer(Dev):
         self._client = []
 
     def run(self):
-        m.figure("Frequency Domain")
         for i in range(len(self._client)):
             # generate spectrum chart
             self._spectrum = fftshift(fft(self._client[i]._out_sig*blackman(len(self._client[i]._out_sig))))
@@ -138,25 +137,21 @@ class SpectrumAnalyzer(Dev):
             self._freq = arange(0,(self._generator._fs)/2,(self._generator._fs)/len(self._spectrum))
             self._spectrum = 20*log10(abs(self._spectrum[len(self._spectrum)/2:len(self._spectrum)]))
             self.scale()
-            m.subplot(len(self._client), 1, i + 1)
+            m.figure("Magnitude " + self._client[i]._name)
             m.plot(self._freq , self._spectrum,".-")
             m.xlim([min(self._freq) , max(self._freq)])
             m. xlabel("f[Hz]")
             m. ylabel("E[dBc]")
-            m.title("Magnitude " + self._client[i]._name)
 
             m.grid()
 
-        m.figure("Spectrogram")
-        for i in range(len(self._client)):
             # generate spectrogram
-            m.subplot(len(self._client), 1, i + 1)
+            m.figure ("Spectrogram " + self._client[i]._name)
             m.specgram (self._client[i]._out_sig , NFFT =128 , Fs=self._generator._fs , noverlap =127)
-            m.ylim([0 , self._generator._fs/4])
-            m.xlim([0 , (PER_NUM-1)/self._generator._fm])
+            m.ylim([0, self._generator._fs/2])
+            m.xlim([0, PER_NUM/self._generator._fm])
             m.xlabel("t[s]")
             m.ylabel("f[Hz]")
-            m.title("Spectrogram " + self._client[i]._name)
             m.grid()
 
 
@@ -199,11 +194,12 @@ class Generator(Dev):
         self._am = None  # modulating signal amplitude
         self._ac = None  # carrier amplitude
         self._fs = None  # sampling frequency
+        self._sigma = None
 
 # collect input data and set range
     def input_data(self):
 
-        print("Input Modulation Frequency:")
+        print("Input Max Modulation Noise Frequency:")
         self._fm = self.verify_data(1, MAX_MOD_FREQ)
         while 0 >= self._fm:
             self._fm = self.verify_data(1, MAX_MOD_FREQ)
@@ -215,10 +211,10 @@ class Generator(Dev):
             self._fc = self.verify_data(CARR_TO_MOD*self._fm)
             pass
 
-        print("Input Modulation Amplitude:")
-        self._am = self.verify_data(1)
-        while 0 >= self._am:
-            self._am = self.verify_data(1)
+        print("Input Standard Deviation:")
+        self._sigma = self.verify_data(1)
+        while 0 >= self._sigma:
+            self._sigma = self.verify_data(1)
             pass
 
         print("Input Modulation Index:")
@@ -227,8 +223,9 @@ class Generator(Dev):
             temp_im = self.verify_data(0, 1)
             pass
 
-        self._ac = self._am/temp_im
         self._fs = FS_TO_CARR*self._fc
+        # save modulation index value
+        self._ac = temp_im
 
 # verify if data is in allowed range
     @staticmethod
@@ -250,7 +247,9 @@ class Generator(Dev):
 # generate signals - carrier and modulating
     def run(self):
         self._time = arange(0, PER_NUM/self._fm, 1.0/(self._fs))
-        for t in self._time: self._out_sig.append(self._am*sin(2*pi*self._fm*t))
+        self._out_sig = normal(0.0, self._sigma, len(self._time))
+        self._am = max(abs(self._out_sig))
+        self._ac = self._am/self._ac
         for t in self._time: self._carr_sig.append((self._ac*sin(2*pi*self._fc*t)))
 
 
@@ -261,7 +260,7 @@ class Modulator(Dev):
 
     def run(self):
         #AM - suppressed carrier, modulate input signal
-        for t, s in zip(self._generator._carr_sig, self._generator._out_sig): self._out_sig.append(t*s)
+        for t, s in zip(self._generator._carr_sig, self._input._out_sig): self._out_sig.append(t*s)
 
 
 # ------------------------------ CHANNEL -----------------------------------
@@ -306,38 +305,45 @@ class Filter(Dev):
         elif 'band' == str(self._type):
             b, a = butter(order, [cut1, cut2], btype='band')
             m.figure()
-            for order in [3, 6, 9]:
-                c, d = butter(order, [cut1, cut2], str(self._type))
-                w, h = freqz(c, d, worN=2000)
-                m.plot((fs * 0.5 / pi) * w, abs(h), label="order = %d" % order)
+            order = 5
+            c, d = butter(order, [cut1, cut2], str(self._type))
+            w, h = freqz(c, d, worN=2000)
+            m.plot((fs * 0.5 / pi) * w, abs(h), label="order = %d" % order)
 
-                m.plot([0, 0.5 * fs], [sqrt(0.5), sqrt(0.5)],
-                         '--', label='sqrt(0.5)')
-                m.xlabel('Frequency (Hz)')
-                m.ylabel('Gain')
-                m.grid(True)
-                m.legend(loc='best')
+            m.plot([0, COEF_CUT_FREQ*cut2*nyq], [sqrt(0.5), sqrt(0.5)],
+                     '--', label='sqrt(0.5)')
+            m.xlabel('f[Hz]')
+            m.ylabel('Gain')
+            m.grid(True)
+            m.legend(loc='best')
         else:
             b, a = butter(order, cut1, btype='low')
             m.figure()
-            for order in [3, 6, 9]:
-                c, d = butter(order, cut1, str(self._type))
-                w, h = freqz(c, d, worN=2000)
-                m.plot((fs * 0.5 / pi) * w, abs(h), label="order = %d" % order)
 
-                m.plot([0, 0.5 * fs], [sqrt(0.5), sqrt(0.5)],
-                         '--', label='sqrt(0.5)')
-                m.xlabel('Frequency (Hz)')
-                m.ylabel('Gain')
-                m.grid(True)
-                m.legend(loc='best')
+            order = 5
+            c, d = butter(order, cut1, str(self._type))
+            w, h = freqz(c, d, worN=2000)
+            m.plot((fs * 0.5 / pi) * w, abs(h), label="order = %d" % order)
+
+            m.plot([0, COEF_CUT_FREQ*cut1*nyq], [sqrt(0.5), sqrt(0.5)],
+                     '--', label='sqrt(0.5)')
+            m.xlabel('f[Hz]')
+            m.ylabel('Gain')
+            m.grid(True)
+            m.legend(loc='best')
 
         return b, a
 
     def run(self):
-        self._out_sig = self.butter_filter(self._input._out_sig, self._generator._fs,
-                                           self._generator._fc-COEF_CUT_FREQ*self._generator._fm,
-                                           self._generator._fc+COEF_CUT_FREQ*self._generator._fm)
+        if self._name == 'Low Pass Filter 1':
+            self._out_sig = self.butter_filter(self._input._out_sig, self._generator._fs,
+                                   COEF_CUT_FREQ*self._generator._fm,
+                                   0)
+            self._out_sig = self._out_sig/max(abs(self._out_sig))*self._generator._am
+        else:
+            self._out_sig = self.butter_filter(self._input._out_sig, self._generator._fs,
+                                               self._generator._fc-COEF_CUT_FREQ*self._generator._fm,
+                                               self._generator._fc+COEF_CUT_FREQ*self._generator._fm)
 
 
 # --------------------------- DEMODULATOR ----------------------------------
@@ -360,3 +366,4 @@ class Amplifier(Dev):
 
 
 
+__author__ = 'Gosia'
